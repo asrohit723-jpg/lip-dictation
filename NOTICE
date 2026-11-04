@@ -1,0 +1,12 @@
+Lip Dictation bundles and downloads third-party work:
+
+- espnet/ — a trimmed copy of ESPnet (Apache License 2.0, Johns Hopkins University and ESPnet
+  contributors) as distributed with "Visual Speech Recognition for Multiple Languages" by
+  Pingchuan Ma et al. (github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages).
+  That repository's licence is in espnet/LICENSE-VSR. Local change: checkpoints are loaded with
+  torch.load(weights_only=True).
+- lipdictation/data/unigram5000_units.txt and 20words_mean_face.npy — from the same repository.
+- Model weights (downloaded by scripts/download-models.sh, not stored in git): the Auto-AVSR
+  LRS3 visual speech recognition model and subword language model by the same authors, and
+  Google's MediaPipe face landmarker. The LRS3-trained weights are for research and private
+  study only, not for commercial use.

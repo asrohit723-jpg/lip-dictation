@@ -1,0 +1,25 @@
+[project]
+name = "lipdictation"
+version = "0.1.0"
+description = "Silent dictation for macOS: mouth the words, the camera reads your lips, the text is pasted"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "anthropic>=2.4",
+    "mediapipe>=1.2",
+    "numpy",
+    "opencv-python",
+    "pyobjc-framework-ApplicationServices",
+    "pyobjc-framework-Cocoa",
+    "pyobjc-framework-Quartz",
+    "six",
+    "torch>=2.4",
+]
+
+[project.scripts]
+lip-dictation = "lipdictation.main:main"
+
+[tool.setuptools]
+packages = ["lipdictation", "espnet"]
+
+[tool.setuptools.package-data]
+lipdictation = ["data/*"]
