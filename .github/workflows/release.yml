@@ -1,0 +1,73 @@
+name: Release
+
+# Every push to main that touches the app or its engine builds it, signs it with the
+# app's own certificate and publishes a GitHub Release. The installed app finds the
+# release and shows "Update now". Same certificate every time, so macOS keeps the app's
+# Camera and Accessibility permissions across updates.
+on:
+  push:
+    branches: [main]
+    paths: ['mac-app/**', 'lipdictation/**', 'espnet/**', 'requirements-engine.txt', 'tests/**', '.github/workflows/release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac-app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Test the app
+        run: swift test
+
+      - name: Test the engine
+        working-directory: .
+        run: |
+          UV="$(mac-app/scripts/fetch-uv.sh)"
+          "$UV" venv -q --python 3.11 /tmp/venv
+          "$UV" pip install -q --python /tmp/venv/bin/python numpy opencv-python-headless mediapipe pytest
+          /tmp/venv/bin/python -m pytest -q tests
+
+      # every build gets a new version (1.0.<run number>), so installed apps can tell it's newer
+      - name: Set the version and notes
+        run: |
+          echo "VERSION=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          git log -1 --format=%B > "$RUNNER_TEMP/notes.md"
+
+      - name: Load the signing certificate
+        env:
+          MAC_P12: ${{ secrets.MAC_P12 }}
+          MAC_P12_PASSWORD: ${{ secrets.MAC_P12_PASSWORD }}
+        run: |
+          test -n "$MAC_P12" || { echo "::error::The MAC_P12 secret is missing"; exit 1; }
+          echo "$MAC_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          scripts/ci-import-cert.sh "$RUNNER_TEMP/signing.p12" "$MAC_P12_PASSWORD"
+          rm -f "$RUNNER_TEMP/signing.p12"
+
+      - name: Build
+        run: INSTALL=0 ./build.sh
+
+      - name: Check the signature
+        run: |
+          APP="build/Lip Dictation.app"
+          codesign -dv --verbose=2 "$APP" 2>&1 | grep -q 'Authority=Lip Dictation Self-Signed'
+          codesign -dv --verbose=2 "$APP/Contents/Helpers/uv" 2>&1 | grep -q 'Authority=Lip Dictation Self-Signed'
+          codesign -d -r- "$APP" 2>&1 | grep designated
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$APP/Contents/Info.plist")" = "$VERSION"
+
+      - name: Zip
+        run: ditto -c -k --sequesterRsrc --keepParent "build/Lip Dictation.app" "build/LipDictation-$VERSION.zip"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "build/LipDictation-$VERSION.zip" \
+            --title "Lip Dictation $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --target "$GITHUB_SHA"

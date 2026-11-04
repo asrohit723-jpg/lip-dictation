@@ -5,3 +5,7 @@ samples/
 .DS_Store
 *.egg-info/
 build/
+mac-app/.build/
+mac-app/build/
+*.p12
+*.pass

@@ -1,0 +1,7 @@
+# What the Mac app installs for its lip-reading engine (Python 3.11).
+anthropic==2.4.0
+mediapipe==1.2.2
+numpy==2.4.6
+opencv-python-headless==5.0.0.93
+six==1.17.0
+torch==2.15.0

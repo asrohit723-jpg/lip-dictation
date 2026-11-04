@@ -43,12 +43,16 @@ def basic(text):
 
 
 class Cleaner:
-    def __init__(self, mode="auto"):
-        self.mode = "claude" if mode == "auto" and available() else ("basic" if mode == "auto" else mode)
+    """mode: auto (Claude when a key is available), claude, or basic. api_key overrides the environment."""
+
+    def __init__(self, mode="auto", api_key=None):
+        has_key = bool(api_key) or available()
+        self.mode = "claude" if mode in ("auto", "claude") and has_key else "basic"
         self.client = None
         if self.mode == "claude":
             import anthropic
-            self.client = anthropic.Anthropic(timeout=10.0, max_retries=1)
+            kwargs = {"api_key": api_key} if api_key else {}
+            self.client = anthropic.Anthropic(timeout=10.0, max_retries=1, **kwargs)
 
     def __call__(self, guesses, recent=()):
         if not guesses:
