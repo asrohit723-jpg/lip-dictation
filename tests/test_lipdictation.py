@@ -76,3 +76,14 @@ def test_fixes_apply_and_grow_with_use():
     assert apply_simple("i got a new ps luke", f) == "i got a new PS5 Rohit"
     bonuses = {fixed: bonus for words, bonus in f.apply("hi luke".split()) for fixed in [words[1]]}
     assert bonuses["Rohit"] > 4.0
+
+
+def test_collector_reads_only_valid_shared_fixes():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("collect", ROOT / "scripts" / "collect-shared-fixes.py")
+    collect = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(collect)
+    body = ('<!-- lip-dictation-fixes v1 -->\n```json\n{"fixes": [{"heard": "ps", "fixed": "PS5"}, '
+            '{"heard": "x; rm -rf /", "fixed": "bad"}, {"heard": "the", "fixed": "<script>"}]}\n```')
+    assert collect.fixes_in({"body": body}) == [("ps", "PS5")]
+    assert collect.fixes_in({"body": "no marker"}) == []

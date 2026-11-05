@@ -100,6 +100,7 @@ struct CleanupTab: View {
     @ObservedObject var engine: Engine
     @State private var key = ""
     @State private var editing = false
+    @State private var sharing = false
 
     init(state: AppState, settings: Settings) {
         self.state = state
@@ -139,6 +140,14 @@ struct CleanupTab: View {
                             .buttonStyle(.borderless)
                             .help("Forget this fix")
                         }
+                    }
+                }
+                if !state.dictionary.unshared.isEmpty {
+                    HStack {
+                        Text("\(state.dictionary.unshared.count) fix\(state.dictionary.unshared.count == 1 ? "" : "es") not shared yet")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Share with everyone…") { sharing = true }
                     }
                 }
             } header: {
@@ -201,6 +210,7 @@ struct CleanupTab: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $sharing) { ShareFixesView(dictionary: state.dictionary) }
     }
 }
 

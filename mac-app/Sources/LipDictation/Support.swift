@@ -253,6 +253,7 @@ final class PersonalDictionary: ObservableObject {
         var fixed: String          // what you changed it to
         var count: Int
         var last: Date
+        var shared: Bool? = nil    // sent to the shared dictionary (as this spelling)
     }
 
     @Published private(set) var fixes: [Fix] = []
@@ -270,7 +271,7 @@ final class PersonalDictionary: ObservableObject {
         var touched: [Fix] = []
         for (heard, fixed) in pairs {
             if let i = fixes.firstIndex(where: { $0.heard == heard }) {
-                if fixes[i].fixed == fixed { fixes[i].count += 1 } else { fixes[i].fixed = fixed; fixes[i].count = 1 }
+                if fixes[i].fixed == fixed { fixes[i].count += 1 } else { fixes[i].fixed = fixed; fixes[i].count = 1; fixes[i].shared = nil }
                 fixes[i].last = Date()
                 touched.append(fixes[i])
             } else {
@@ -290,8 +291,41 @@ final class PersonalDictionary: ObservableObject {
 
     var forEngine: [[Any]] { fixes.map { [$0.heard, $0.fixed, $0.count] } }
 
+    var unshared: [Fix] { fixes.filter { $0.shared != true } }
+
+    func markShared(_ heards: Set<String>) {
+        for i in fixes.indices where heards.contains(fixes[i].heard) { fixes[i].shared = true }
+        save()
+    }
+
     private func save() {
         Paths.ensure(Paths.support)
         if let data = try? JSONEncoder().encode(fixes) { try? data.write(to: url, options: .atomic) }
+    }
+}
+
+/// Sharing fixes with everyone, through a GitHub issue the user reviews and submits.
+/// A weekly workflow on the repo counts fixes made by different people and proposes them
+/// for the shared dictionary (see .github/workflows/shared-dictionary.yml).
+enum SharedFixes {
+    static let marker = "lip-dictation-fixes v1"
+
+    static func issueURL(for fixes: [PersonalDictionary.Fix]) -> URL? {
+        let items = fixes.prefix(80).map { ["heard": $0.heard, "fixed": $0.fixed] }
+        guard let json = try? JSONSerialization.data(withJSONObject: ["fixes": items], options: [.sortedKeys]),
+              let jsonText = String(data: json, encoding: .utf8) else { return nil }
+        let body = """
+        These are words Lip Dictation misread for me and how I corrected them, for the shared dictionary. \
+        Only the words are here: no sentences, video or other text.
+
+        <!-- \(marker) -->
+        ```json
+        \(jsonText)
+        ```
+        """
+        var c = URLComponents(string: "https://github.com/\(Updater.repo)/issues/new")!
+        c.queryItems = [URLQueryItem(name: "title", value: "Shared fixes (\(items.count))"),
+                        URLQueryItem(name: "body", value: body)]
+        return c.url
     }
 }

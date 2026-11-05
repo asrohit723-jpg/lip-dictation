@@ -1,0 +1,59 @@
+name: Shared dictionary
+
+# Once a week, reads the "Shared fixes" issues people submit from the app, counts each fix by
+# GitHub account, and proposes the fixes at least three people made as a pull request that
+# updates lipdictation/data/community.tsv. Merging it releases an update with the new fixes.
+# Issue text is untrusted: it's only parsed by scripts/collect-shared-fixes.py, never run.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency: shared-dictionary
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Collect shared fixes
+        run: |
+          gh issue list --search '"lip-dictation-fixes v1" in:body' --state all --limit 1000 \
+            --json number,author,body,state > "$RUNNER_TEMP/issues.json"
+          python3 scripts/collect-shared-fixes.py "$RUNNER_TEMP/issues.json" > "$RUNNER_TEMP/shared.jsonl"
+          python3 scripts/merge-community.py "$RUNNER_TEMP/shared.jsonl"
+
+      - name: Propose the update
+        run: |
+          if git diff --quiet lipdictation/data/community.tsv; then
+            echo "No change to the shared dictionary."
+            exit 0
+          fi
+          COUNT=$(grep -vc '^#' lipdictation/data/community.tsv || true)
+          BRANCH="shared-dictionary-$(date -u +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -am "Shared dictionary: $COUNT fixes made by three or more people"
+          git push -f origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "Shared dictionary update ($COUNT fixes)" \
+            --body "Fixes that three or more people shared from the app. Review the words in \`lipdictation/data/community.tsv\`, then merge to release them to everyone." \
+            || gh issue create --title "Shared dictionary update ready ($COUNT fixes)" \
+                 --body "The update is on the branch \`$BRANCH\`. [Review it and open the pull request](https://github.com/${{ github.repository }}/compare/main...$BRANCH?expand=1), then merge to release it. (Actions can open the pull request itself if you allow it in Settings › Actions › General › Workflow permissions.)"
+
+      - name: Thank and close the processed issues
+        run: |
+          jq -r '.[] | select(.state == "OPEN") | .number' "$RUNNER_TEMP/issues.json" | while read -r n; do
+            if jq -e --argjson n "$n" 'select(.issue == $n)' "$RUNNER_TEMP/shared.jsonl" > /dev/null; then
+              gh issue close "$n" --comment "Thanks! Your fixes are counted. Each one joins the shared dictionary once three people have made it."
+            fi
+          done

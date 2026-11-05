@@ -87,9 +87,13 @@ fields; for the rest, use History.
 
 **Shared dictionary.** Fixes that many people make can help everyone:
 [lipdictation/data/community.tsv](lipdictation/data/community.tsv) ships with each update and
-is applied with a weaker preference than your own fixes. `scripts/merge-community.py` builds it from
-shared fixes and only includes a fix once at least three different Macs made it, which keeps personal
-names out.
+is applied with a weaker preference than your own fixes. In Settings › Accuracy, **Share with everyone…** lists
+your fixes (untick anything personal) and opens a pre-filled GitHub issue with just those words, for
+you to submit (it needs a GitHub account). Once a week, the
+[Shared dictionary workflow](.github/workflows/shared-dictionary.yml) reads those issues with
+`scripts/collect-shared-fixes.py`, counts each fix once per GitHub account, and proposes every fix at
+least three people made as a pull request; merging it releases an update. Requiring three different
+people keeps personal names and pranks out, and nothing reaches the app without a review.
 
 ### What Wispr Flow does, and what we borrowed
 
