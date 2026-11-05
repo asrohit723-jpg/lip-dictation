@@ -127,3 +127,102 @@ enum FocusContext {
         return before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : before
     }
 }
+
+/// Notices when you fix what Lip Dictation just typed.
+///
+/// Right after pasting, it notes the text field's contents. For the next 45 seconds it looks
+/// again every couple of seconds; once the text where the dictation went has changed and you've
+/// stopped typing for a few seconds, it hands over what was typed and what it became. Only the
+/// dictated stretch is compared: the text before it must be unchanged, and the text after it
+/// is matched from the end.
+final class CorrectionWatcher {
+    private var element: AXUIElement?
+    private var before = ""                 // field text before the dictation
+    private var after = ""                  // field text after it
+    private var inserted = ""
+    private var lastSeen = ""
+    private var stableSince = Date()
+    private var started = Date()
+    private var timer: Timer?
+    var onCorrection: (_ inserted: String, _ edited: String) -> Void = { _, _ in }
+
+    /// Call right after pasting `text`. Reads the field a moment later, once the paste has landed.
+    func watch(inserted text: String) {
+        finish()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            guard let el = Self.focusedElement(), let value = Self.value(of: el),
+                  let range = value.range(of: text.trimmingCharacters(in: .whitespaces), options: .backwards) else { return }
+            element = el
+            inserted = String(value[range])
+            before = String(value[..<range.lowerBound])
+            after = String(value[range.upperBound...])
+            lastSeen = value
+            started = Date()
+            stableSince = Date()
+            timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.check() }
+        }
+    }
+
+    /// Stop watching, keeping any correction already made (called when a new dictation starts).
+    func finish() {
+        if timer != nil { check(final: true) }
+        timer?.invalidate()
+        timer = nil
+        element = nil
+    }
+
+    private func check(final: Bool = false) {
+        guard let el = element, let value = Self.value(of: el) else { return stop() }
+        if value != lastSeen {
+            lastSeen = value
+            stableSince = Date()
+        }
+        let settled = Date().timeIntervalSince(stableSince) >= 4
+        let expired = Date().timeIntervalSince(started) > 45
+        guard final || settled || expired else { return }
+        if let edited = editedStretch(in: value), edited != inserted {
+            onCorrection(inserted, edited)
+            return stop()
+        }
+        if expired || final { stop() }
+    }
+
+    private func editedStretch(in value: String) -> String? {
+        Self.editedStretch(before: before, after: after, now: value)
+    }
+
+    /// What the dictated stretch reads now, if the text before it is intact.
+    static func editedStretch(before: String, after: String, now value: String) -> String? {
+        guard value.hasPrefix(before) else { return nil }
+        let rest = value.dropFirst(before.count)
+        // the text that followed the dictation, if it's still there, marks where the stretch ends
+        let tail = after.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty, let r = rest.range(of: tail, options: .backwards) {
+            return String(rest[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return String(rest).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func stop() {
+        timer?.invalidate()
+        timer = nil
+        element = nil
+    }
+
+    static func focusedElement() -> AXUIElement? {
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString,
+                                            &focused) == .success,
+              let ref = focused, CFGetTypeID(ref) == AXUIElementGetTypeID() else { return nil }
+        return (ref as! AXUIElement)
+    }
+
+    static func value(of el: AXUIElement) -> String? {
+        var subrole: CFTypeRef?
+        AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &subrole)
+        if (subrole as? String) == (kAXSecureTextFieldSubrole as String) { return nil }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+}

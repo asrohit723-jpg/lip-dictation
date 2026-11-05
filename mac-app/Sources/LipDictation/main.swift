@@ -137,7 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showHistory() {
-        show("history", title: "History", resizable: true) { HistoryView(history: state.history) }
+        show("history", title: "History", resizable: true) {
+            HistoryView(history: state.history) { [weak self] entry, text in self?.state.correct(entry: entry, to: text) }
+        }
     }
 
     @objc private func checkForUpdates() {

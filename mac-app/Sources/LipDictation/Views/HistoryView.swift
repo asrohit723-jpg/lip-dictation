@@ -3,6 +3,8 @@ import SwiftUI
 /// Everything you've dictated, kept only on this Mac.
 struct HistoryView: View {
     @ObservedObject var history: History
+    var correct: (History.Entry, String) -> Void = { _, _ in }
+    @State private var editing: History.Entry?
     @State private var search = ""
     @State private var selection = Set<UUID>()
     @State private var confirmClear = false
@@ -23,11 +25,14 @@ struct HistoryView: View {
                 List(selection: $selection) {
                     ForEach(grouped, id: \.0) { day, entries in
                         Section(day) {
-                            ForEach(entries) { HistoryRow(entry: $0).tag($0.id) }
+                            ForEach(entries) { e in HistoryRow(entry: e, fix: { editing = e }).tag(e.id) }
                         }
                     }
                 }
                 .contextMenu(forSelectionType: UUID.self) { ids in
+                    if ids.count == 1, let e = history.entries.first(where: { ids.contains($0.id) }) {
+                        Button("Fix the Text…") { editing = e }
+                    }
                     Button("Copy") { copy(ids) }
                     Divider()
                     Button("Delete", role: .destructive) { history.delete(ids) }
@@ -41,6 +46,9 @@ struct HistoryView: View {
                 Button { confirmClear = true } label: { Label("Clear History", systemImage: "trash") }
                     .disabled(history.entries.isEmpty)
             }
+        }
+        .sheet(item: $editing) { e in
+            FixSheet(entry: e) { text in correct(e, text) }
         }
         .confirmationDialog("Delete all \(history.entries.count) dictations?", isPresented: $confirmClear) {
             Button("Delete All", role: .destructive) { history.clear() }
@@ -70,8 +78,35 @@ struct HistoryView: View {
     }
 }
 
+/// Fix what a dictation should have said; the changed words go into your dictionary.
+private struct FixSheet: View {
+    let entry: History.Entry
+    let save: (String) -> Void
+    @State private var text = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Fix this dictation").font(.headline)
+            Text("Change the words it got wrong. Lip Dictation remembers the fix for next time.")
+                .font(.callout).foregroundStyle(.secondary)
+            TextField("", text: $text, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(2...6)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") { save(text); dismiss() }.keyboardShortcut(.defaultAction)
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || text == entry.text)
+            }
+        }
+        .padding(18)
+        .frame(width: 440)
+        .onAppear { text = entry.text }
+    }
+}
+
 private struct HistoryRow: View {
     let entry: History.Entry
+    var fix: () -> Void = {}
     @State private var hover = false
     @State private var copied = false
 
@@ -90,6 +125,10 @@ private struct HistoryRow: View {
                 .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            Button(action: fix) { Image(systemName: "pencil") }
+                .buttonStyle(.borderless)
+                .help("Fix the text")
+                .opacity(hover ? 1 : 0)
             Button {
                 Paster.copy(entry.text)
                 copied = true

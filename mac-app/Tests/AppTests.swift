@@ -46,3 +46,23 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(Array(data), [0, 1, 2, 3, 10, 11, 12, 13])
     }
 }
+
+final class CorrectionTests: XCTestCase {
+    func testFindsTheEditedStretch() {
+        let before = "Hi team. ", after = " Thanks!"
+        XCTAssertEqual(CorrectionWatcher.editedStretch(before: before, after: after,
+                                                       now: "Hi team. I bought a PS5. Thanks!"), "I bought a PS5.")
+        XCTAssertEqual(CorrectionWatcher.editedStretch(before: "", after: "", now: "My name is Rohit. More"), "My name is Rohit. More")
+        XCTAssertNil(CorrectionWatcher.editedStretch(before: before, after: after, now: "Hello team. I bought a PS5."))
+    }
+
+    func testDictionaryStrengthensRepeatedFixes() {
+        let d = PersonalDictionary()
+        let heard = "zz-test-\(UUID().uuidString)"
+        d.learn([(heard, "PS5")])
+        d.learn([(heard, "PS5")])
+        XCTAssertEqual(d.fixes.first { $0.heard == heard }?.count, 2)
+        d.remove(heard)
+        XCTAssertNil(d.fixes.first { $0.heard == heard })
+    }
+}

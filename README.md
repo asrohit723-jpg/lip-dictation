@@ -73,6 +73,24 @@ On subtitled news footage (49 sentences, `scripts/eval_context.py`), the word er
 20.5% with the lip reader alone to 18.2% with the context step (19.3% without the previous sentence as context). On real dictation, which
 has less context than a news speech, expect the gain to vary.
 
+### It learns from your corrections
+
+When you fix a word Lip Dictation typed — backspace "PS" and type "PS5", or change "Luke" to
+"Rohit" — it notices (it re-reads the text field for up to 45 seconds after pasting), works out
+which words you replaced, and keeps the fix in **your dictionary**. Next time the lip reader reads
+"ps" or "luke", the fix gets a strong preference in the context step, so it wins unless the
+sentence clearly means something else ("Luke Skywalker" stays Luke). Each repeat of the same fix
+makes it stronger. A small "Learned: ps → PS5" note confirms it. You can also fix any dictation
+from History (the pencil button), and see or remove fixes in Settings › Accuracy. Text you type
+after a dictation and complete rewrites are ignored. It works in apps that let macOS read their text
+fields; for the rest, use History.
+
+**Shared dictionary.** Fixes that many people make can help everyone:
+[lipdictation/data/community.tsv](lipdictation/data/community.tsv) ships with each update and
+is applied with a weaker preference than your own fixes. `scripts/merge-community.py` builds it from
+shared fixes and only includes a fix once at least three different Macs made it, which keeps personal
+names out.
+
 ### What Wispr Flow does, and what we borrowed
 
 Wispr Flow's own write-ups describe dictation as a context problem rather than a pure recognition
@@ -133,6 +151,7 @@ update needs new libraries or models, they download in the background while dict
 | Lip-reading engine (Python), which the app runs as a child process and streams grayscale frames to | [lipdictation/engine.py](lipdictation/engine.py) |
 | Face tracking and mouth crops (MediaPipe, aligned to the model's training mean face) | [lipdictation/face.py](lipdictation/face.py) |
 | The model and beam search with a language model | [lipdictation/vsr.py](lipdictation/vsr.py), [espnet/](espnet/) |
+| Learning from corrections, your dictionary, the shared dictionary | [lipdictation/learning.py](lipdictation/learning.py), `CorrectionWatcher` in [Input.swift](mac-app/Sources/LipDictation/Input.swift) |
 | Context: look-alike words and the on-device language model | [lipdictation/context.py](lipdictation/context.py), [lipdictation/visemes.py](lipdictation/visemes.py) |
 | Cleanup | [lipdictation/cleanup.py](lipdictation/cleanup.py) |
 

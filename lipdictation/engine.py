@@ -6,16 +6,19 @@ lips, cleans the text up and answers with the result.
 
 stdin, repeated:  4-byte big-endian header length, the JSON header, then
                   header["n"] payload bytes when the header has "n".
-  {"type": "config", "cleanup": "auto|claude|basic", "api_key": "...", "beam": 10, "words": ["Rohit", ...]}
+  {"type": "config", "cleanup": "auto|claude|basic", "api_key": "...", "beam": 10, "words": ["Rohit", ...],
+   "corrections": [["luke", "Rohit", 2], ...]}            your dictionary: heard, fixed, times fixed
   {"type": "begin", "id": 7}
   {"type": "frame", "t": 12.345, "w": 640, "h": 480, "n": 307200}   + 8-bit grayscale pixels
   {"type": "end", "id": 7, "recent": ["previous dictation", ...], "context": "text before the cursor", "app": "Mail"}
   {"type": "cancel"}
+  {"type": "learn", "inserted": "I bought a new PS.", "edited": "I bought a new PS5."}
 stdout, one JSON object per line:
   {"type": "status", "message": "..."}       while loading
   {"type": "ready", "gpu": true}
   {"type": "face", "seen": true}            a few times a second while recording
   {"type": "result", "id": 7, "text": "...", "guesses": [...], "contextual": "...", "timing": {...}}
+  {"type": "learned", "pairs": [["ps", "PS5"]]}     your fixes, for the app to keep
   {"type": "error", "id": 7, "message": "..."}
 """
 import argparse
@@ -60,7 +63,11 @@ class Engine:
         self.reader = LipReader(models)
         self.tracker = FaceTracker(os.path.join(models, "face_landmarker.task"))
         self.cleaner = Cleaner("basic")
+        from .learning import Fixes, load_community
         self.words = []
+        self.fixes = Fixes()
+        self.community = load_community()
+        self.fixes.set(community=self.community)
         self.corrector = None
         text_lm = os.path.join(models, "text-lm")
         if os.path.exists(os.path.join(text_lm, "model.safetensors")):
@@ -68,6 +75,7 @@ class Engine:
             try:
                 from .context import Corrector
                 self.corrector = Corrector(text_lm)
+                self.corrector.fixes = self.fixes
             except Exception:
                 traceback.print_exc()          # lip reading still works without it
         self.reset()
@@ -83,7 +91,9 @@ class Engine:
         self.cleaner = Cleaner(msg.get("cleanup", "auto"), msg.get("api_key") or None)
         if msg.get("beam"):
             self.reader.beam.beam_size = int(msg["beam"])
-        self.words = [w for w in msg.get("words") or [] if w.strip()]
+        self.fixes.set(personal=[(h, f, int(c)) for h, f, c in msg.get("corrections") or []],
+                       community=self.community)
+        self.words = [w for w in msg.get("words") or [] if w.strip()] + self.fixes.words()
         if self.corrector:
             self.corrector.set_words(self.words)
         send(type="configured", cleanup=self.cleaner.mode)
@@ -122,6 +132,9 @@ class Engine:
         recent = msg.get("recent") or []
         context = (msg.get("context") or "").strip() or " ".join(recent)
         best = guesses[0]
+        if not self.corrector and self.fixes.items:
+            from .learning import apply_simple
+            best = apply_simple(best, self.fixes)
         if self.corrector:
             t2 = time.perf_counter()
             best, info = self.corrector.correct(scored, context[-400:])
@@ -157,6 +170,10 @@ def main(argv=None):
                 engine.reset()
             elif kind == "config":
                 engine.config(msg)
+            elif kind == "learn":
+                from .learning import extract
+                pairs = extract(msg.get("inserted") or "", msg.get("edited") or "")
+                send(type="learned", pairs=[list(p) for p in pairs])
             elif kind == "ping":
                 send(type="pong")
         except Exception as e:

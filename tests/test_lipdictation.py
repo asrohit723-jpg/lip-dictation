@@ -59,3 +59,20 @@ def test_questions_after_greetings():
     from lipdictation.cleanup import basic
     assert basic("HEY BABY HOW ARE YOU") == "Hey baby how are you?"
     assert basic("OH YOU ARE AWESOME") == "Oh you are awesome."
+
+
+def test_learns_the_words_you_fixed():
+    from lipdictation.learning import extract
+    assert extract("I have bought a new PS.", "I have bought a new PS5.") == [("ps", "PS5")]
+    assert extract("My name is Luke.", "My name is Rohit. And I live in Chennai") == [("luke", "Rohit")]
+    assert extract("See you at the park.", "Completely different sentence here now.") == []   # a rewrite
+    assert extract("meet me at the bar", "meet me at the bar tonight") == []                  # typing on
+
+
+def test_fixes_apply_and_grow_with_use():
+    from lipdictation.learning import Fixes, apply_simple
+    f = Fixes()
+    f.set(personal=[("ps", "PS5", 1), ("luke", "Rohit", 3)])
+    assert apply_simple("i got a new ps luke", f) == "i got a new PS5 Rohit"
+    bonuses = {fixed: bonus for words, bonus in f.apply("hi luke".split()) for fixed in [words[1]]}
+    assert bonuses["Rohit"] > 4.0

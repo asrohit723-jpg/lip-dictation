@@ -85,6 +85,7 @@ class Corrector:
         self.word_bonus = word_bonus      # offsets the language model's taste for short sentences
         self.start = self.tok.bos_token or self.tok.eos_token or "\n"
         self.custom = set()
+        self.fixes = None              # learning.Fixes: your corrections and shared ones
         self._alt_cache = {}
         self._tok_cache = {}
         self.correct([("HELLO HOW ARE YOU", 0.0)])     # warm up the GPU, so the first dictation isn't slow
@@ -190,6 +191,12 @@ class Corrector:
         for text, score in nbest:
             words = text.lower().split()
             cands[" ".join(words)] = (self.vsr_weight * (score - top), 0.0, words)
+            if self.fixes:                        # fixes you've made before, strongly preferred
+                for fixed, bonus in self.fixes.apply(words):
+                    key = " ".join(fixed)
+                    part = self.vsr_weight * (score - top) + bonus
+                    if key not in cands or cands[key][0] < part:
+                        cands[key] = (part, 0.0, fixed)
         scored = self._score(cands, context)
         best = max(scored, key=scored.get)
         vsr_part, _, origin = cands[best]

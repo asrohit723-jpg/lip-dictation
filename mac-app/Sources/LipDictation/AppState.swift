@@ -16,6 +16,10 @@ final class AppState: ObservableObject {
     let installer = Installer()
     let camera = Camera()
     let history = History()
+    let dictionary = PersonalDictionary()
+    let watcher = CorrectionWatcher()
+    /// The history entry the watcher is following, so a correction can update it.
+    private var watchedEntry: UUID?
     let hud = HUDController()
     lazy var holdKey = HoldKey(choice: settings.holdKey)
 
@@ -48,6 +52,8 @@ final class AppState: ObservableObject {
         engine.onResult = { [weak self] r in self?.finished(r) }
         engine.onFailure = { [weak self] f in self?.failed(f) }
         engine.onFace = { [weak self] seen in self?.face(seen) }
+        engine.onLearned = { [weak self] pairs in self?.learned(pairs) }
+        watcher.onCorrection = { [weak self] inserted, edited in self?.corrected(inserted: inserted, edited: edited) }
         camera.onFrame = { [weak self] t, w, h, data in self?.engine.frame(time: t, width: w, height: h, pixels: data) }
 
         holdKey.onDown = { [weak self] in self?.keyDown() }
@@ -65,7 +71,8 @@ final class AppState: ObservableObject {
         settings.$cameraID.dropFirst().sink { [weak self] id in self?.camera.switchCamera(to: id) }
             .store(in: &cancellables)
         // Republish child changes so views watching AppState refresh.
-        [engine.objectWillChange, installer.objectWillChange, camera.objectWillChange, history.objectWillChange]
+        [engine.objectWillChange, installer.objectWillChange, camera.objectWillChange, history.objectWillChange,
+         dictionary.objectWillChange]
             .forEach { $0.receive(on: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables) }
         engine.$state.removeDuplicates().sink { [weak self] s in
             if s == .ready { DispatchQueue.main.async { self?.configureEngine() } }
@@ -98,7 +105,7 @@ final class AppState: ObservableObject {
 
     func configureEngine() {
         engine.configure(useClaude: settings.useClaude, apiKey: settings.useClaude ? Keychain.apiKey() : nil,
-                         beam: settings.beam, words: settings.wordList)
+                         beam: settings.beam, words: settings.wordList, corrections: dictionary.forEngine)
     }
 
     func saveAPIKey(_ key: String?) {
@@ -175,6 +182,7 @@ final class AppState: ObservableObject {
             hud.show(.message(symbol: "video.slash", text: "Allow camera access in Settings", tint: .orange))
             return
         }
+        watcher.finish()          // keep a correction to the last dictation before starting a new one
         dictationID += 1
         let id = dictationID
         pressedAt = Date()
@@ -258,6 +266,7 @@ final class AppState: ObservableObject {
         let entry = History.Entry(date: Date(), text: text, lips: r.guesses.first ?? "", app: targetApp,
                                   seconds: r.timing["frames"].map { $0 / 25 } ?? 0)
         history.add(entry)
+        watchedEntry = entry.id
         lastResult = entry
         lastRaw = r.guesses.first
         lastTry = (text, r.guesses.first ?? "")
@@ -270,10 +279,39 @@ final class AppState: ObservableObject {
         if settings.insertMode == .paste && Paster.trusted && !NSApp.isActive {
             Paster.paste(out)
             hud.show(.done(text: text, copied: false))
+            if settings.learnFromCorrections { watcher.watch(inserted: text) }
         } else {
             Paster.copy(out)
             hud.show(.done(text: text, copied: true))
         }
+    }
+
+    // MARK: Learning from corrections
+
+    /// You changed what was typed: ask the engine which words you fixed.
+    private func corrected(inserted: String, edited: String) {
+        Log.write("correction noticed (\(inserted.count) → \(edited.count) characters)")
+        if let id = watchedEntry {
+            history.update(id, text: edited)
+            if lastResult?.id == id { lastResult?.text = edited }
+        }
+        engine.learn(inserted: inserted, edited: edited)
+    }
+
+    /// A fix you made in History.
+    func correct(entry: History.Entry, to text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text != entry.text else { return }
+        history.update(entry.id, text: text)
+        engine.learn(inserted: entry.text, edited: text)
+    }
+
+    private func learned(_ pairs: [(String, String)]) {
+        let fixes = dictionary.learn(pairs)
+        guard !fixes.isEmpty else { return }
+        configureEngine()
+        let summary = fixes.prefix(2).map { "\($0.heard) → \($0.fixed)" }.joined(separator: ", ")
+        hud.show(.message(symbol: "brain.head.profile", text: "Learned: \(summary)", tint: .accentColor))
     }
 
     private func failed(_ f: Engine.Failure) {

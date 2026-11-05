@@ -35,6 +35,8 @@ final class Engine: ObservableObject {
     var onFace: ((Bool) -> Void)?
     var onResult: ((Result) -> Void)?
     var onFailure: ((Failure) -> Void)?
+    /// Fixes found in a correction you made: (heard, fixed).
+    var onLearned: (([(String, String)]) -> Void)?
 
     private var process: Process?
     private var _input: FileHandle?
@@ -161,6 +163,9 @@ final class Engine: ObservableObject {
         case "error":
             onFailure?(Failure(id: msg["id"] as? Int, kind: msg["kind"] as? String ?? "error",
                                message: msg["message"] as? String ?? "Something went wrong."))
+        case "learned":
+            let pairs = (msg["pairs"] as? [[String]] ?? []).compactMap { $0.count == 2 ? ($0[0], $0[1]) : nil }
+            if !pairs.isEmpty { onLearned?(pairs) }
         case "fatal":
             stopping = true
             state = .failed(msg["message"] as? String ?? "The lip reader didn't start.")
@@ -171,9 +176,9 @@ final class Engine: ObservableObject {
 
     // MARK: Messages out
 
-    func configure(useClaude: Bool, apiKey: String?, beam: Int, words: [String]) {
+    func configure(useClaude: Bool, apiKey: String?, beam: Int, words: [String], corrections: [[Any]]) {
         let c: [String: Any] = ["type": "config", "cleanup": useClaude ? "auto" : "basic",
-                                "api_key": apiKey ?? "", "beam": beam, "words": words]
+                                "api_key": apiKey ?? "", "beam": beam, "words": words, "corrections": corrections]
         pendingConfig = c
         if isReady { send(c) }
     }
@@ -183,6 +188,7 @@ final class Engine: ObservableObject {
         send(["type": "end", "id": id, "recent": recent, "context": context ?? "", "app": app])
     }
     func cancel() { send(["type": "cancel"]) }
+    func learn(inserted: String, edited: String) { send(["type": "learn", "inserted": inserted, "edited": edited]) }
 
     /// One 8-bit grayscale frame. Called from the camera queue.
     func frame(time: Double, width: Int, height: Int, pixels: Data) {

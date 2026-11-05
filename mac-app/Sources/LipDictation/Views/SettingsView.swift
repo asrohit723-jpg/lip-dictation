@@ -122,6 +122,32 @@ struct CleanupTab: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
+                Toggle("Learn from my corrections", isOn: $settings.learnFromCorrections)
+                if state.dictionary.fixes.isEmpty {
+                    Text("Nothing learned yet.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(state.dictionary.fixes) { fix in
+                        HStack(spacing: 8) {
+                            Text(fix.heard).foregroundStyle(.secondary).strikethrough(color: .secondary.opacity(0.6))
+                            Image(systemName: "arrow.right").font(.caption).foregroundStyle(.tertiary)
+                            Text(fix.fixed).fontWeight(.medium)
+                            Spacer()
+                            if fix.count > 1 { Text("×\(fix.count)").font(.caption).foregroundStyle(.secondary) }
+                            Button { state.dictionary.remove(fix.heard); state.configureEngine() } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Forget this fix")
+                        }
+                    }
+                }
+            } header: {
+                Text("Your dictionary")
+            } footer: {
+                Text("When you fix a word Lip Dictation typed — backspace “PS” and type “PS5” — it notices and remembers. Next time it reads “PS”, it writes “PS5”, unless the sentence clearly means something else. Fixes made more often count for more. You can also fix any dictation in History. It works in apps that let macOS read their text fields (most do).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 TextEditor(text: $settings.customWords)
                     .font(.body)
                     .frame(height: 70)

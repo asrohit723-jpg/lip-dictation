@@ -162,6 +162,7 @@ final class Settings: ObservableObject {
     @Published var showPreview: Bool { didSet { d.set(showPreview, forKey: "showPreview") } }
     @Published var onboarded: Bool { didSet { d.set(onboarded, forKey: "onboarded") } }
     @Published var useCursorContext: Bool { didSet { d.set(useCursorContext, forKey: "useCursorContext") } }
+    @Published var learnFromCorrections: Bool { didSet { d.set(learnFromCorrections, forKey: "learnFromCorrections") } }
     /// Names and terms of yours, one per line.
     @Published var customWords: String { didSet { d.set(customWords, forKey: "customWords") } }
 
@@ -181,6 +182,7 @@ final class Settings: ObservableObject {
         showPreview = d.object(forKey: "showPreview") as? Bool ?? true
         onboarded = d.bool(forKey: "onboarded")
         useCursorContext = d.object(forKey: "useCursorContext") as? Bool ?? true
+        learnFromCorrections = d.object(forKey: "learnFromCorrections") as? Bool ?? true
         customWords = d.string(forKey: "customWords") ?? ""
     }
 }
@@ -212,6 +214,12 @@ final class History: ObservableObject {
         save()
     }
 
+    func update(_ id: UUID, text: String) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[i].text = text
+        save()
+    }
+
     func delete(_ ids: Set<UUID>) {
         entries.removeAll { ids.contains($0.id) }
         save()
@@ -233,5 +241,57 @@ enum Sound {
         guard enabled, let s = NSSound(named: name) else { return }
         s.volume = 0.35
         s.play()
+    }
+}
+
+/// Your personal dictionary: fixes you made to what Lip Dictation typed ("ps" → "PS5"),
+/// kept on this Mac. Each fix gets stronger the more often you make it.
+final class PersonalDictionary: ObservableObject {
+    struct Fix: Codable, Identifiable, Equatable {
+        var id: String { heard }
+        var heard: String          // what the lip reader wrote, lowercase
+        var fixed: String          // what you changed it to
+        var count: Int
+        var last: Date
+    }
+
+    @Published private(set) var fixes: [Fix] = []
+    private var url: URL { Paths.support.appendingPathComponent("dictionary.json") }
+
+    init() {
+        if let data = try? Data(contentsOf: url), let saved = try? JSONDecoder().decode([Fix].self, from: data) {
+            fixes = saved
+        }
+    }
+
+    /// Adds or strengthens fixes. Returns the ones that are new or changed.
+    @discardableResult
+    func learn(_ pairs: [(String, String)]) -> [Fix] {
+        var touched: [Fix] = []
+        for (heard, fixed) in pairs {
+            if let i = fixes.firstIndex(where: { $0.heard == heard }) {
+                if fixes[i].fixed == fixed { fixes[i].count += 1 } else { fixes[i].fixed = fixed; fixes[i].count = 1 }
+                fixes[i].last = Date()
+                touched.append(fixes[i])
+            } else {
+                let f = Fix(heard: heard, fixed: fixed, count: 1, last: Date())
+                fixes.insert(f, at: 0)
+                touched.append(f)
+            }
+        }
+        if !touched.isEmpty { save() }
+        return touched
+    }
+
+    func remove(_ heard: String) {
+        fixes.removeAll { $0.heard == heard }
+        save()
+    }
+
+    var forEngine: [[Any]] { fixes.map { [$0.heard, $0.fixed, $0.count] } }
+
+    private func save() {
+        Paths.ensure(Paths.support)
+        if let data = try? JSONEncoder().encode(fixes) { try? data.write(to: url, options: .atomic) }
     }
 }
