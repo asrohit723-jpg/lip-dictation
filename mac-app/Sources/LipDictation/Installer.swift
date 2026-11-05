@@ -30,6 +30,19 @@ final class Installer: NSObject, ObservableObject {
         ModelFile(path: "face_landmarker.task",
                   url: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
                   sha256: "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff", size: 3_758_596),
+        // The on-device language model that weighs readings by context (SmolLM2-360M, Apache 2.0).
+        ModelFile(path: "text-lm/config.json", url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M/resolve/main/config.json",
+                  sha256: "34f7801487078de7e434e19162c497e5cc6ff397080e40e8586627cb68a5168a", size: 689),
+        ModelFile(path: "text-lm/generation_config.json",
+                  url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M/resolve/main/generation_config.json",
+                  sha256: "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059", size: 111),
+        ModelFile(path: "text-lm/tokenizer.json", url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M/resolve/main/tokenizer.json",
+                  sha256: "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c", size: 2_104_556),
+        ModelFile(path: "text-lm/tokenizer_config.json",
+                  url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M/resolve/main/tokenizer_config.json",
+                  sha256: "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424", size: 3_658),
+        ModelFile(path: "text-lm/model.safetensors", url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M/resolve/main/model.safetensors",
+                  sha256: "7aaff6661428bed033abba9522bec81938678642cca3181fe752b6ca9e1e540f", size: 723_674_912),
     ]
     static var modelBytes: Int64 { modelFiles.reduce(0) { $0 + $1.size } }
 
@@ -71,8 +84,17 @@ final class Installer: NSObject, ObservableObject {
 
     static var isInstalled: Bool { librariesInstalled && modelsInstalled }
 
-    /// Whether this is a first install (show the big download) or a quick library refresh.
-    static var hasEverInstalled: Bool { FileManager.default.fileExists(atPath: Paths.venv.path) }
+    /// An earlier install that the engine can still run on while an update fetches what's new.
+    static var canRunMeanwhile: Bool {
+        hasEverInstalled && FileManager.default.isExecutableFile(atPath: Paths.python.path)
+            && ["vsr/model.pth", "lm/model.pth", "face_landmarker.task"].allSatisfy {
+                FileManager.default.fileExists(atPath: Paths.models.appendingPathComponent($0).path)
+            }
+    }
+
+    /// Whether an install had finished before this launch (so this is an update, not a first install).
+    /// Read once: it must not flip halfway through a first install.
+    static let hasEverInstalled = FileManager.default.fileExists(atPath: Paths.installRecord.path)
 
     // MARK: Run
 

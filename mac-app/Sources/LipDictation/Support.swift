@@ -161,6 +161,13 @@ final class Settings: ObservableObject {
     @Published var keepCameraOn: Bool { didSet { d.set(keepCameraOn, forKey: "keepCameraOn") } }
     @Published var showPreview: Bool { didSet { d.set(showPreview, forKey: "showPreview") } }
     @Published var onboarded: Bool { didSet { d.set(onboarded, forKey: "onboarded") } }
+    @Published var useCursorContext: Bool { didSet { d.set(useCursorContext, forKey: "useCursorContext") } }
+    /// Names and terms of yours, one per line.
+    @Published var customWords: String { didSet { d.set(customWords, forKey: "customWords") } }
+
+    var wordList: [String] {
+        customWords.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
 
     init() {
         holdKey = HoldKeyChoice(rawValue: d.string(forKey: "holdKey") ?? "") ?? .rightOption
@@ -173,6 +180,8 @@ final class Settings: ObservableObject {
         keepCameraOn = d.bool(forKey: "keepCameraOn")
         showPreview = d.object(forKey: "showPreview") as? Bool ?? true
         onboarded = d.bool(forKey: "onboarded")
+        useCursorContext = d.object(forKey: "useCursorContext") as? Bool ?? true
+        customWords = d.string(forKey: "customWords") ?? ""
     }
 }
 

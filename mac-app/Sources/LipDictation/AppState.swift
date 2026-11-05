@@ -32,6 +32,9 @@ final class AppState: ObservableObject {
     private var pressedAt: Date?
     private var maxTimer: Timer?
     private var faceSeen = true
+    /// Captured when the key goes down, before anything changes focus.
+    private var context: String?
+    private var targetApp = ""
     private var cancellables = Set<AnyCancellable>()
 
     static let tail: TimeInterval = 0.4        // keep filming after release: the last word needs it
@@ -55,8 +58,9 @@ final class AppState: ObservableObject {
         settings.$keepCameraOn.sink { [weak self] on in
             self?.camera.keepOn = on
         }.store(in: &cancellables)
-        settings.$useClaude.combineLatest(settings.$beam).dropFirst()
-            .sink { [weak self] _, _ in DispatchQueue.main.async { self?.configureEngine() } }
+        settings.$useClaude.combineLatest(settings.$beam, settings.$customWords).dropFirst()
+            .debounce(for: .milliseconds(600), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.configureEngine() }
             .store(in: &cancellables)
         settings.$cameraID.dropFirst().sink { [weak self] id in self?.camera.switchCamera(to: id) }
             .store(in: &cancellables)
@@ -72,23 +76,29 @@ final class AppState: ObservableObject {
 
     func launch() {
         holdKey.start()
-        if Installer.isInstalled {
+        // During an update that needs new parts, run on what's already installed meanwhile.
+        if Installer.isInstalled || Installer.canRunMeanwhile {
             engine.start()
         }
     }
 
-    /// First install or repair. Starts the engine when done.
-    func install(_ done: ((Bool) -> Void)? = nil) {
-        engine.stop()
+    /// First install, repair, or an update that needs new parts. Dictation keeps working during an
+    /// update (the running engine is restarted when it's done); a repair stops it first.
+    func install(stopEngine: Bool = false, _ done: ((Bool) -> Void)? = nil) {
+        if stopEngine || !Installer.hasEverInstalled { engine.stop() }
         installer.run { [weak self] ok in
-            if ok { self?.engine.start() }
+            guard let self else { return }
+            if ok { self.engine.isReady ? self.engine.restart() : self.engine.start() }
             done?(ok)
         }
     }
 
+    /// An earlier version is installed and this one needs more (new libraries or models).
+    var isUpgrading: Bool { Installer.hasEverInstalled && (isInstalling || needsSetup) }
+
     func configureEngine() {
         engine.configure(useClaude: settings.useClaude, apiKey: settings.useClaude ? Keychain.apiKey() : nil,
-                         beam: settings.beam)
+                         beam: settings.beam, words: settings.wordList)
     }
 
     func saveAPIKey(_ key: String?) {
@@ -120,7 +130,7 @@ final class AppState: ObservableObject {
 
     var needsAttention: Bool {
         if case .failed = engine.state { return true }
-        return !cameraAuthorized || !accessibilityGranted || (needsSetup && !isInstalling)
+        return !cameraAuthorized || !accessibilityGranted || (needsSetup && !isInstalling && !Installer.hasEverInstalled)
     }
 
     struct Status {
@@ -130,8 +140,8 @@ final class AppState: ObservableObject {
     }
 
     var status: Status {
-        if isInstalling { return Status(text: "Setting up…", color: .blue, busy: true) }
-        if needsSetup { return Status(text: "Needs setup", color: .orange) }
+        if isInstalling { return Status(text: Installer.hasEverInstalled ? "Updating…" : "Setting up…", color: .blue, busy: true) }
+        if needsSetup && !Installer.hasEverInstalled { return Status(text: "Needs setup", color: .orange) }
         if !cameraAuthorized { return Status(text: "Needs camera access", color: .orange) }
         if !accessibilityGranted { return Status(text: "Needs Accessibility", color: .orange) }
         switch phase {
@@ -151,7 +161,7 @@ final class AppState: ObservableObject {
 
     private func keyDown() {
         guard phase == .idle else { return }
-        if needsSetup {
+        if needsSetup && !engine.isReady {
             hud.show(.message(symbol: "arrow.down.circle", text: "Finish setting up Lip Dictation first", tint: .orange))
             return
         }
@@ -168,6 +178,8 @@ final class AppState: ObservableObject {
         dictationID += 1
         let id = dictationID
         pressedAt = Date()
+        targetApp = Paster.frontApp
+        context = settings.useCursorContext && Paster.trusted && !NSApp.isActive ? FocusContext.textBeforeCursor() : nil
         faceSeen = true
         phase = .starting
         engine.begin(id: id)
@@ -210,7 +222,7 @@ final class AppState: ObservableObject {
             camera.stopRecording()
             guard dictationID == id else { return }
             Sound.play("Pop", enabled: settings.sounds)
-            engine.end(id: id, recent: history.entries.prefix(3).reversed().map(\.text))
+            engine.end(id: id, recent: history.entries.prefix(3).reversed().map(\.text), context: context, app: targetApp)
         }
     }
 
@@ -243,7 +255,7 @@ final class AppState: ObservableObject {
             hud.show(.message(symbol: "questionmark.circle", text: "Couldn't make out any words", tint: .orange))
             return
         }
-        let entry = History.Entry(date: Date(), text: text, lips: r.guesses.first ?? "", app: Paster.frontApp,
+        let entry = History.Entry(date: Date(), text: text, lips: r.guesses.first ?? "", app: targetApp,
                                   seconds: r.timing["frames"].map { $0 / 25 } ?? 0)
         history.add(entry)
         lastResult = entry
@@ -294,7 +306,7 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 self.phase = .reading
                 self.hud.show(.reading)
-                self.engine.end(id: id, recent: [])
+                self.engine.end(id: id, recent: [], context: nil, app: "")
             }
         })
     }

@@ -6,16 +6,16 @@ lips, cleans the text up and answers with the result.
 
 stdin, repeated:  4-byte big-endian header length, the JSON header, then
                   header["n"] payload bytes when the header has "n".
-  {"type": "config", "cleanup": "auto|claude|basic", "api_key": "...", "beam": 10}
+  {"type": "config", "cleanup": "auto|claude|basic", "api_key": "...", "beam": 10, "words": ["Rohit", ...]}
   {"type": "begin", "id": 7}
   {"type": "frame", "t": 12.345, "w": 640, "h": 480, "n": 307200}   + 8-bit grayscale pixels
-  {"type": "end", "id": 7, "recent": ["previous dictation", ...]}
+  {"type": "end", "id": 7, "recent": ["previous dictation", ...], "context": "text before the cursor", "app": "Mail"}
   {"type": "cancel"}
 stdout, one JSON object per line:
   {"type": "status", "message": "..."}       while loading
   {"type": "ready", "gpu": true}
   {"type": "face", "seen": true}            a few times a second while recording
-  {"type": "result", "id": 7, "text": "...", "guesses": [...], "timing": {...}}
+  {"type": "result", "id": 7, "text": "...", "guesses": [...], "contextual": "...", "timing": {...}}
   {"type": "error", "id": 7, "message": "..."}
 """
 import argparse
@@ -60,8 +60,18 @@ class Engine:
         self.reader = LipReader(models)
         self.tracker = FaceTracker(os.path.join(models, "face_landmarker.task"))
         self.cleaner = Cleaner("basic")
+        self.words = []
+        self.corrector = None
+        text_lm = os.path.join(models, "text-lm")
+        if os.path.exists(os.path.join(text_lm, "model.safetensors")):
+            send(type="status", message="Loading the language model…")
+            try:
+                from .context import Corrector
+                self.corrector = Corrector(text_lm)
+            except Exception:
+                traceback.print_exc()          # lip reading still works without it
         self.reset()
-        send(type="ready", gpu=self.reader.gpu is not None)
+        send(type="ready", gpu=self.reader.gpu is not None, context=self.corrector is not None)
 
     def reset(self, ident=None):
         self.id = ident
@@ -73,6 +83,9 @@ class Engine:
         self.cleaner = Cleaner(msg.get("cleanup", "auto"), msg.get("api_key") or None)
         if msg.get("beam"):
             self.reader.beam.beam_size = int(msg["beam"])
+        self.words = [w for w in msg.get("words") or [] if w.strip()]
+        if self.corrector:
+            self.corrector.set_words(self.words)
         send(type="configured", cleanup=self.cleaner.mode)
 
     def frame(self, msg, payload):
@@ -101,14 +114,23 @@ class Engine:
         keep = face.resample(list(range(len(frames))), stamps)
         crops = face.mouth_crops([frames[i] for i in keep], [anchors[i] for i in keep])
         t1 = time.perf_counter()
-        guesses, timing = self.reader.read(crops, nbest=5)
+        scored, timing = self.reader.read_scored(crops, nbest=10)
         timing["crop"] = t1 - t0
-        if not guesses:
+        if not scored:
             return send(type="error", id=ident, kind="empty", message="Couldn't make out any words. Try again.")
-        t2 = time.perf_counter()
-        text = self.cleaner(guesses, msg.get("recent") or [])
-        timing["cleanup"] = time.perf_counter() - t2
-        send(type="result", id=ident, text=text, guesses=guesses, cleanup=self.cleaner.mode,
+        guesses = [t for t, _ in scored]
+        recent = msg.get("recent") or []
+        context = (msg.get("context") or "").strip() or " ".join(recent)
+        best = guesses[0]
+        if self.corrector:
+            t2 = time.perf_counter()
+            best, info = self.corrector.correct(scored, context[-400:])
+            timing["context"] = time.perf_counter() - t2
+        t3 = time.perf_counter()
+        text = self.cleaner(guesses[:5], recent, best=best, context=context, app=msg.get("app") or "",
+                            words=self.words)
+        timing["cleanup"] = time.perf_counter() - t3
+        send(type="result", id=ident, text=text, guesses=guesses[:5], contextual=best, cleanup=self.cleaner.mode,
              face=seen / len(anchors), timing={k: round(v, 3) for k, v in timing.items()})
 
 

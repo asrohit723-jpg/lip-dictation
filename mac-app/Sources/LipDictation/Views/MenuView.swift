@@ -12,7 +12,9 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             UpdateBanner(updater: updater)
-            if state.needsSetup || state.isInstalling {
+            if state.isUpgrading {
+                upgradeCard
+            } else if state.needsSetup || state.isInstalling {
                 setupCard
             } else if !state.cameraAuthorized || !state.accessibilityGranted {
                 permissionsCard
@@ -33,6 +35,7 @@ struct MenuView: View {
                 MenuRow(title: "Settings…", symbol: "gearshape", shortcut: "⌘,", action: openSettings)
                 MenuRow(title: "Quit Lip Dictation", symbol: "power", shortcut: "⌘Q") { NSApp.terminate(nil) }
             }
+            versionRow
         }
         .padding(14)
         .frame(width: 330)
@@ -43,17 +46,65 @@ struct MenuView: View {
             Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 30, height: 30)
             Text("Lip Dictation").font(.headline)
             Spacer()
-            StatusPill(status: state.status)
+            if updater.available != nil {
+                UpdatePill(updater: updater)
+            } else {
+                StatusPill(status: state.status)
+            }
         }
+    }
+
+    /// Always there, so updating never means reinstalling: version, and check or update.
+    private var versionRow: some View {
+        HStack(spacing: 6) {
+            Text("Version \(updater.currentVersion)").font(.caption).foregroundStyle(.tertiary)
+            Spacer()
+            switch updater.status {
+            case .checking:
+                ProgressView().controlSize(.mini)
+                Text("Checking…").font(.caption).foregroundStyle(.secondary)
+            case .downloading, .installing:
+                Text(updater.status == .installing ? "Restarting…" : "Updating \(Int(updater.progress * 100))%")
+                    .font(.caption).foregroundStyle(.secondary)
+            default:
+                if let release = updater.available {
+                    Button("Update to \(release.version)") { updater.install() }
+                        .buttonStyle(.link).font(.caption.weight(.semibold))
+                } else {
+                    if updater.status == .upToDate {
+                        Image(systemName: "checkmark").font(.caption2).foregroundStyle(.green)
+                    }
+                    Button(updater.status == .upToDate ? "Up to date" : "Check for updates") { updater.check() }
+                        .buttonStyle(.link).font(.caption)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
     }
 
     private var setupCard: some View {
         Callout(symbol: "arrow.down.circle.fill", tint: .accentColor,
                 title: state.isInstalling ? "Setting up the lip reader…" : "Finish setting up",
-                text: state.isInstalling ? "Downloading about 2 GB. You can keep working."
-                                         : "Lip Dictation needs to download its lip reader (about 2 GB) once.") {
+                text: state.isInstalling ? "Downloading about 3 GB. You can keep working."
+                                         : "Lip Dictation needs to download its lip reader (about 3 GB) once.") {
             Button(state.isInstalling ? "Show progress" : "Set up") { openSetup() }
                 .buttonStyle(.borderedProminent).controlSize(.small)
+        }
+    }
+
+    private var upgradeCard: some View {
+        Callout(symbol: "sparkles", tint: .accentColor, title: "Getting the new language model",
+                text: state.isInstalling ? "About 0.7 GB, for better accuracy. Dictation keeps working meanwhile."
+                                         : "The update needs a new part. It didn't finish downloading.") {
+            if state.isInstalling {
+                if state.installer.models == .running {
+                    ProgressView(value: state.installer.modelProgress).frame(width: 200)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            } else {
+                Button("Try again") { state.install() }.controlSize(.small)
+            }
         }
     }
 
@@ -62,6 +113,39 @@ struct MenuView: View {
                 text: !state.cameraAuthorized ? "Allow the camera so Lip Dictation can see your lips."
                                               : "Allow Accessibility so it can notice the key and type for you.") {
             Button("Fix it") { openSetup() }.controlSize(.small)
+        }
+    }
+}
+
+/// Titli-style: a one-click Update button in the header while an update is waiting.
+struct UpdatePill: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        Button { updater.install() } label: {
+            HStack(spacing: 5) {
+                if updater.isBusy {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.down.circle.fill")
+                }
+                Text(label).font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .foregroundStyle(.white)
+            .background(Color.accentColor, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(updater.isBusy)
+        .help(updater.available.map { "Update Lip Dictation to \($0.version)" } ?? "")
+    }
+
+    private var label: String {
+        switch updater.status {
+        case .downloading: return "Updating \(Int(updater.progress * 100))%"
+        case .installing: return "Restarting…"
+        default: return "Update"
         }
     }
 }

@@ -16,7 +16,8 @@ final class AppTests: XCTestCase {
     }
 
     func testModelManifestIsComplete() {
-        XCTAssertEqual(Installer.modelFiles.count, 5)
+        XCTAssertEqual(Installer.modelFiles.count, 10)
+        XCTAssertTrue(Installer.modelFiles.contains { $0.path == "text-lm/model.safetensors" })
         XCTAssertTrue(Installer.modelFiles.allSatisfy { $0.sha256.count == 64 && $0.url.hasPrefix("https://") })
         XCTAssertGreaterThan(Installer.modelBytes, 1_200_000_000)
     }

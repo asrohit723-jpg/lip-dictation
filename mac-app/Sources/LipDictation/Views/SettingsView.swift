@@ -10,7 +10,7 @@ struct SettingsView: View {
             GeneralTab(state: state, settings: state.settings)
                 .tabItem { Label("General", systemImage: "gearshape") }
             CleanupTab(state: state, settings: state.settings)
-                .tabItem { Label("Cleanup", systemImage: "sparkles") }
+                .tabItem { Label("Accuracy", systemImage: "sparkles") }
             CameraTab(state: state, settings: state.settings)
                 .tabItem { Label("Camera", systemImage: "video") }
             AdvancedTab(state: state, settings: state.settings)
@@ -110,9 +110,37 @@ struct CleanupTab: View {
     var body: some View {
         Form {
             Section {
+                HStack {
+                    Label("Context", systemImage: "text.word.spacing")
+                    Spacer()
+                    Text(engine.hasContextModel ? "On-device language model on" : "Language model not installed")
+                        .foregroundStyle(engine.hasContextModel ? Color.secondary : Color.orange)
+                }
+                Toggle("Use the text before the cursor", isOn: $settings.useCursorContext)
+            } footer: {
+                Text("Lips can't tell “meal” from “mail”, so a language model on this Mac weighs the lip reader's best readings and look-alike words, and picks the sentence that makes sense — after “I want to eat a”, a food, not a car. It reads the text just before your cursor (never password fields) to know what you're writing. That text stays on this Mac unless Claude cleanup is on.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                TextEditor(text: $settings.customWords)
+                    .font(.body)
+                    .frame(height: 70)
+                    .overlay(alignment: .topLeading) {
+                        if settings.customWords.isEmpty {
+                            Text("One per line, e.g. names of people, places, products").foregroundStyle(.tertiary)
+                                .padding(.top, 1).padding(.leading, 5).allowsHitTesting(false)
+                        }
+                    }
+            } header: {
+                Text("Your words")
+            } footer: {
+                Text("Names and terms you use. A name is just lip shapes to the lip reader, so listing it lets it choose your word when the lips fit.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 Toggle("Clean up with Claude", isOn: $settings.useClaude)
             } footer: {
-                Text("Lip reading can't tell apart sounds that look the same on the lips, like p, b and m. Claude looks at the lip reader's five best guesses and your recent dictations, picks what you meant and adds punctuation. Only that text is sent, never video. Without it, simple rules fix capitals and punctuation.")
+                Text("For the best results, Claude also looks at the readings, the text before your cursor, the app and your words, then writes what you meant with punctuation. Only that text is sent, never video. Without it, the on-device model chooses the words and simple rules add capitals and punctuation.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Anthropic API key") {
@@ -234,7 +262,7 @@ struct AdvancedTab: View {
         .confirmationDialog("Download the lip reader's libraries again?", isPresented: $confirmReinstall) {
             Button("Repair") {
                 try? FileManager.default.removeItem(at: Paths.installRecord)
-                state.install()
+                state.install(stopEngine: true)
             }
         } message: {
             Text("This reinstalls Python and its libraries and re-checks the model files. The model is only downloaded again if a file is damaged.")

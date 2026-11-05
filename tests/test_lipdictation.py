@@ -40,3 +40,22 @@ def test_reads_a_real_clip():
     anchors = clip.track(face.FaceTracker(MODELS / "face_landmarker.task"), frames, stamps)
     guesses, _ = clip.read(LipReader(MODELS), frames, anchors, stamps)
     assert "NEW YORK CITY" in guesses[0] and "SMITH COLLEGE" in guesses[0]
+
+
+def test_visemes_group_look_alike_sounds():
+    from lipdictation.visemes import to_visemes
+    assert to_visemes("P AE1 T".split()) == to_visemes("B AE1 T".split()) == to_visemes("M AE1 T".split())
+    assert to_visemes("F AE1 N".split()) == to_visemes("V AE1 N".split())
+
+
+def test_lexicon_finds_homophenes_and_neighbours():
+    from lipdictation.context import Lexicon
+    lex = Lexicon()
+    assert lex.vis["meal"] == lex.vis["mail"]
+    assert lex.vis["story"] in lex.neighbours(lex.vis["glory"])
+
+
+def test_questions_after_greetings():
+    from lipdictation.cleanup import basic
+    assert basic("HEY BABY HOW ARE YOU") == "Hey baby how are you?"
+    assert basic("OH YOU ARE AWESOME") == "Oh you are awesome."

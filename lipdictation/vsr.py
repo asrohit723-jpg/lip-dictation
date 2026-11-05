@@ -90,18 +90,24 @@ class LipReader:
         return "".join(pieces).replace("▁", " ").strip()
 
     @torch.no_grad()
-    def read(self, crops, nbest=5):
-        """Returns (guesses, timings). Guesses are distinct texts, best first."""
+    def read_scored(self, crops, nbest=10):
+        """Returns ([(text, score)], timings): distinct texts, best first, with beam-search scores."""
         t0 = time.perf_counter()
         feats = self.encode(crops)
         t1 = time.perf_counter()
         hyps = self.beam(feats)
         t2 = time.perf_counter()
-        guesses = []
+        out, seen = [], set()
         for h in hyps:
             text = self._text(h)
-            if text and text not in guesses:
-                guesses.append(text)
-            if len(guesses) == nbest:
+            if text and text not in seen:
+                seen.add(text)
+                out.append((text, float(h.score)))
+            if len(out) == nbest:
                 break
-        return guesses, {"encode": t1 - t0, "search": t2 - t1, "frames": len(crops)}
+        return out, {"encode": t1 - t0, "search": t2 - t1, "frames": len(crops)}
+
+    def read(self, crops, nbest=5):
+        """Returns (guesses, timings). Guesses are distinct texts, best first."""
+        scored, timing = self.read_scored(crops, nbest)
+        return [t for t, _ in scored], timing

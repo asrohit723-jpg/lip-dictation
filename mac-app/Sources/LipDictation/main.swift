@@ -13,15 +13,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.action = #selector(togglePopover)
+        statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.target = self
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateIcon()
 
         popover.behavior = .transient
         popover.animates = true
         popover.contentViewController = NSHostingController(rootView: menuView())
 
-        state.objectWillChange
+        Updater.shared.objectWillChange.merge(with: state.objectWillChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] in DispatchQueue.main.async { self?.updateIcon() } }
             .store(in: &cancellables)
@@ -33,11 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.launch()
         Updater.shared.startChecking()
 
-        if !state.settings.onboarded || state.needsSetup || !state.cameraAuthorized || !state.accessibilityGranted {
+        if !state.settings.onboarded || !Installer.hasEverInstalled || !state.cameraAuthorized || !state.accessibilityGranted {
             showSetup()
         }
-        // An app update that changed the engine's libraries: refresh them quietly.
-        if state.settings.onboarded && Installer.hasEverInstalled && !Installer.librariesInstalled {
+        // An app update that needs new libraries or models: fetch them in the background.
+        if state.settings.onboarded && Installer.hasEverInstalled && !Installer.isInstalled {
             state.install()
         }
     }
@@ -64,9 +65,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateIcon() {
-        let image = NSImage(systemSymbolName: state.menuBarSymbol, accessibilityDescription: "Lip Dictation")
+        let waiting = Updater.shared.available != nil && state.phase == .idle && !state.needsAttention
+        let image = NSImage(systemSymbolName: waiting ? "arrow.down.circle" : state.menuBarSymbol,
+                            accessibilityDescription: waiting ? "Lip Dictation – update available" : "Lip Dictation")
         image?.isTemplate = true
         statusItem.button?.image = image
+    }
+
+    /// Left click opens the menu; right click (or Control-click) shows the short menu.
+    @objc private func statusItemClicked() {
+        let e = NSApp.currentEvent
+        if e?.type == .rightMouseUp || e?.modifierFlags.contains(.control) == true {
+            showContextMenu()
+        } else {
+            togglePopover()
+        }
+    }
+
+    private func showContextMenu() {
+        let menu = NSMenu()
+        let u = Updater.shared
+        if let r = u.available {
+            menu.addItem(withTitle: u.isBusy ? "Updating…" : "Update to \(r.version)", action: u.isBusy ? nil : #selector(installUpdate),
+                         keyEquivalent: "").target = self
+        } else {
+            menu.addItem(withTitle: "Check for Updates", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        }
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "History", action: #selector(showHistory), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Lip Dictation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc private func installUpdate() {
+        Updater.shared.install()
     }
 
     @objc private func togglePopover() {
@@ -75,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
         } else {
             state.refreshPermissions()
+            Updater.shared.checkIfStale()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

@@ -15,6 +15,7 @@ final class Engine: ObservableObject {
         var id: Int
         var text: String
         var guesses: [String]
+        var contextual = ""
         var cleanup: String
         var timing: [String: Double]
     }
@@ -28,6 +29,8 @@ final class Engine: ObservableObject {
     @Published private(set) var state: State = .stopped
     @Published private(set) var usingGPU = false
     @Published private(set) var cleanupMode = "basic"
+    /// Whether the on-device language model (context step) is loaded.
+    @Published private(set) var hasContextModel = false
 
     var onFace: ((Bool) -> Void)?
     var onResult: ((Result) -> Void)?
@@ -141,6 +144,7 @@ final class Engine: ObservableObject {
             state = .starting(msg["message"] as? String ?? "Starting…")
         case "ready":
             usingGPU = msg["gpu"] as? Bool ?? false
+            hasContextModel = msg["context"] as? Bool ?? false
             state = .ready
             restarts = 0
             if let c = pendingConfig { send(c) }
@@ -151,6 +155,7 @@ final class Engine: ObservableObject {
         case "result":
             onResult?(Result(id: msg["id"] as? Int ?? 0, text: msg["text"] as? String ?? "",
                              guesses: msg["guesses"] as? [String] ?? [],
+                             contextual: msg["contextual"] as? String ?? "",
                              cleanup: msg["cleanup"] as? String ?? "basic",
                              timing: msg["timing"] as? [String: Double] ?? [:]))
         case "error":
@@ -166,15 +171,17 @@ final class Engine: ObservableObject {
 
     // MARK: Messages out
 
-    func configure(useClaude: Bool, apiKey: String?, beam: Int) {
+    func configure(useClaude: Bool, apiKey: String?, beam: Int, words: [String]) {
         let c: [String: Any] = ["type": "config", "cleanup": useClaude ? "auto" : "basic",
-                                "api_key": apiKey ?? "", "beam": beam]
+                                "api_key": apiKey ?? "", "beam": beam, "words": words]
         pendingConfig = c
         if isReady { send(c) }
     }
 
     func begin(id: Int) { send(["type": "begin", "id": id]) }
-    func end(id: Int, recent: [String]) { send(["type": "end", "id": id, "recent": recent]) }
+    func end(id: Int, recent: [String], context: String?, app: String) {
+        send(["type": "end", "id": id, "recent": recent, "context": context ?? "", "app": app])
+    }
     func cancel() { send(["type": "cancel"]) }
 
     /// One 8-bit grayscale frame. Called from the camera queue.

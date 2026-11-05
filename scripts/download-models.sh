@@ -26,4 +26,11 @@ if [[ "${1:-}" == "--samples" ]]; then
   mkdir -p ../samples
   [ -s ../samples/2016-03-12.mov ] || curl -fsSL -o ../samples/2016-03-12.mov \
     "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/ce/2016-03-12_President_Obama%27s_Weekly_Address.webm/2016-03-12_President_Obama%27s_Weekly_Address.webm.360p.mpeg4.mov"
+  [ -s ../samples/2017-01-07.mov ] || curl -fsSL -o ../samples/2017-01-07.mov \
+    "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/29/2017-01-07_President_Obama%27s_Weekly_Address.webm/2017-01-07_President_Obama%27s_Weekly_Address.webm.360p.mpeg4.mov"
+  # their English subtitles, for measuring accuracy (scripts/eval_cache.py)
+  for d in 2016-03-12 2017-01-07; do
+    [ -s ../samples/$d.srt ] || curl -fsSL -o ../samples/$d.srt \
+      "https://commons.wikimedia.org/w/index.php?title=TimedText:${d}_President_Obama%27s_Weekly_Address.webm.en.srt&action=raw"
+  done
 fi

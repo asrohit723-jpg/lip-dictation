@@ -98,3 +98,32 @@ enum Paster {
     /// The app that will receive the text, for the history.
     static var frontApp: String { NSWorkspace.shared.frontmostApplication?.localizedName ?? "" }
 }
+
+/// What you're writing into, read through Accessibility when you start dictating:
+/// the text just before the cursor, so the lip reader can pick words that fit it.
+enum FocusContext {
+    static func textBeforeCursor(limit: Int = 600) -> String? {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let ref = focused, CFGetTypeID(ref) == AXUIElementGetTypeID() else { return nil }
+        let element = ref as! AXUIElement
+        var subrole: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
+        if (subrole as? String) == (kAXSecureTextFieldSubrole as String) { return nil }   // never read passwords
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+              let text = value as? String, !text.isEmpty else { return nil }
+        let ns = text as NSString
+        var cursor = ns.length
+        var range: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &range) == .success,
+           let r = range, CFGetTypeID(r) == AXValueGetTypeID() {
+            var cf = CFRange()
+            if AXValueGetValue(r as! AXValue, .cfRange, &cf) { cursor = min(max(cf.location, 0), ns.length) }
+        }
+        let start = max(0, cursor - limit)
+        let before = ns.substring(with: NSRange(location: start, length: cursor - start))
+        return before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : before
+    }
+}

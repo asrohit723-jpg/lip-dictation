@@ -19,7 +19,7 @@ struct UpdateBanner: View {
                     case .downloading, .installing:
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.small)
-                            Text(updater.status == .downloading ? "Downloading…" : "Installing…").font(.caption)
+                            Text(updater.status == .downloading ? "Downloading… \(Int(updater.progress * 100))%" : "Installing…").font(.caption)
                         }
                     case .failed(let message):
                         Text(message).font(.caption).foregroundStyle(.red)
@@ -86,7 +86,7 @@ struct AboutTab: View {
         switch updater.status {
         case .checking: return "Checking…"
         case .upToDate: return "You're up to date."
-        case .downloading: return "Downloading…"
+        case .downloading: return "Downloading… \(Int(updater.progress * 100))%"
         case .installing: return "Installing…"
         case .failed(let m): return m
         case .idle:

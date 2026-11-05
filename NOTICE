@@ -10,3 +10,9 @@ Lip Dictation bundles and downloads third-party work:
   LRS3 visual speech recognition model and subword language model by the same authors, and
   Google's MediaPipe face landmarker. The LRS3-trained weights are for research and private
   study only, not for commercial use.
+- lipdictation/data/lexicon.tsv — common English words with their lip shapes and frequencies, made by
+  scripts/make-lexicon.py from the CMU Pronouncing Dictionary (Copyright 1993-2015 Carnegie Mellon
+  University, BSD-style licence, github.com/cmusphinx/cmudict) and word frequencies from wordfreq by
+  Robyn Speer (data CC BY-SA 4.0, github.com/rspeer/wordfreq). This file is therefore shared under
+  CC BY-SA 4.0.
+- The on-device language model the app downloads is SmolLM2-360M by Hugging Face (Apache 2.0).

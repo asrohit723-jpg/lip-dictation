@@ -5,3 +5,4 @@ numpy==2.4.6
 opencv-python-headless==5.0.0.93
 six==1.17.0
 torch==2.15.0
+transformers==4.57.1

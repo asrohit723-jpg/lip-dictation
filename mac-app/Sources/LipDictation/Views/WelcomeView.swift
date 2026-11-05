@@ -212,7 +212,7 @@ struct DownloadStep: View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer(minLength: 0)
             Text(state.needsSetup ? "Getting the lip reader" : "The lip reader is ready").font(.title2.weight(.bold))
-            Text("It runs on this Mac, so it downloads once: about 0.8 GB of libraries and a 1.2 GB lip-reading model. This takes a few minutes.")
+            Text("It runs on this Mac, so it downloads once: about 0.8 GB of libraries, the 1.2 GB lip reader and a 0.7 GB language model that picks words by context. This takes a few minutes.")
                 .foregroundStyle(.secondary)
             InstallRows(installer: state.installer)
             if case .failed = state.installer.libraries { retry }
@@ -238,7 +238,7 @@ struct InstallRows: View {
             row(symbol: "shippingbox.fill", title: "Python and libraries",
                 detail: installer.librariesDetail.isEmpty ? "PyTorch, MediaPipe, OpenCV" : installer.librariesDetail,
                 state: installer.libraries, progress: nil)
-            row(symbol: "brain.head.profile", title: "Lip-reading model",
+            row(symbol: "brain.head.profile", title: "Lip-reading and language models",
                 detail: modelDetail, state: installer.models, progress: installer.modelProgress)
         }
     }
@@ -248,7 +248,7 @@ struct InstallRows: View {
         if installer.models == .running {
             return String(format: "%.2f of %.1f GB", installer.modelProgress * total, total)
         }
-        return String(format: "Auto-AVSR, trained on LRS3 · %.1f GB", total)
+        return String(format: "Lip reader and language model · %.1f GB", total)
     }
 
     private func row(symbol: String, title: String, detail: String, state: Installer.StepState, progress: Double?) -> some View {

@@ -30,6 +30,9 @@ final class Updater: ObservableObject {
     @Published private(set) var available: Release?
     @Published private(set) var status: Status = .idle
     @Published private(set) var lastChecked: Date?
+    /// 0…1 while downloading an update.
+    @Published private(set) var progress: Double = 0
+    private var progressWatch: NSKeyValueObservation?
 
     private var timer: Timer?
 
@@ -60,6 +63,14 @@ final class Updater: ObservableObject {
         }
         return false
     }
+
+    /// Checks unless it checked recently; used when the menu opens.
+    func checkIfStale(after seconds: TimeInterval = 15 * 60) {
+        guard autoCheck, Date().timeIntervalSince(lastChecked ?? .distantPast) > seconds else { return }
+        check()
+    }
+
+    var isBusy: Bool { status == .downloading || status == .installing }
 
     func check(completion: ((Release?) -> Void)? = nil) {
         guard status != .downloading && status != .installing else { return }
@@ -103,7 +114,8 @@ final class Updater: ObservableObject {
     func install() {
         guard let release = available else { return }
         status = .downloading
-        URLSession.shared.downloadTask(with: release.zip) { file, _, error in
+        progress = 0
+        let task = URLSession.shared.downloadTask(with: release.zip) { file, _, error in
             do {
                 guard let file else { throw Self.fail(error?.localizedDescription ?? "The download didn't finish.") }
                 let newApp = try Self.unpackAndVerify(file, expecting: release.version)
@@ -114,7 +126,11 @@ final class Updater: ObservableObject {
             } catch {
                 DispatchQueue.main.async { self.status = .failed(error.localizedDescription) }
             }
-        }.resume()
+        }
+        progressWatch = task.progress.observe(\.fractionCompleted) { [weak self] p, _ in
+            DispatchQueue.main.async { self?.progress = p.fractionCompleted }
+        }
+        task.resume()
     }
 
     private static func fail(_ message: String) -> NSError {
