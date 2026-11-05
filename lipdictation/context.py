@@ -87,6 +87,7 @@ class Corrector:
         self.custom = set()
         self._alt_cache = {}
         self._tok_cache = {}
+        self.correct([("HELLO HOW ARE YOU", 0.0)])     # warm up the GPU, so the first dictation isn't slow
 
     def set_words(self, words):
         """Your vocabulary: names and terms the lip reader should be able to produce."""
