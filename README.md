@@ -168,10 +168,10 @@ pinned [uv](https://github.com/astral-sh/uv) to fetch Python 3.11 and the engine
 
 ```bash
 # The app
-mac-app/build.sh                    # builds and installs an ad-hoc signed ~/Applications/Lip Dictation.app
-mac-app/build/Lip\ Dictation.app/Contents/MacOS/LipDictation --install          # first-run setup, headless
-mac-app/build/Lip\ Dictation.app/Contents/MacOS/LipDictation --dictate-file clip.mov --start 20 --end 28
-mac-app/build/Lip\ Dictation.app/Contents/MacOS/LipDictation --snapshot /tmp/shots   # renders every screen
+mac-app/build.sh                    # builds an ad-hoc signed mac-app/build/Lip Dictation Dev.app
+mac-app/build/Lip\ Dictation\ Dev.app/Contents/MacOS/LipDictation --install          # first-run setup, headless
+mac-app/build/Lip\ Dictation\ Dev.app/Contents/MacOS/LipDictation --dictate-file clip.mov --start 20 --end 28
+mac-app/build/Lip\ Dictation\ Dev.app/Contents/MacOS/LipDictation --snapshot /tmp/shots   # renders every screen
 
 # The engine on its own, from the terminal
 ./scripts/setup.sh --samples        # venv, models and a public-domain test clip
@@ -198,8 +198,10 @@ of your own silent dictation is the measurement that matters. Its videos are of 
 less is within noise, which is why every result comes with an interval.
 
 `--dictate-file` plays a video through the same path as the camera, so the whole app can be tested
-without one. Local builds are ad-hoc signed, so installing one makes macOS ask for permissions again
-until the next release.
+without one. Local builds are ad-hoc signed, so they are a separate app, **Lip Dictation Dev**
+(`com.rohit.lipdictation.dev`), with its own permissions and settings. macOS keeps Camera and
+Accessibility permissions per app identity: a local build that reused the real app's identifier with
+a different signature made macOS forget them, and ask again, every time you switched between the two.
 
 **Signing certificate:** made once with `mac-app/scripts/make-signing-cert.sh`. The private key lives
 in `~/.lip-dictation-signing/` and in the repo secrets `MAC_P12` and `MAC_P12_PASSWORD`. Keep that

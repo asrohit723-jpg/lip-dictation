@@ -4,14 +4,25 @@
 #   SIGN_IDENTITY codesign identity (default: ad hoc). Releases are signed on GitHub
 #                 with the app's own certificate; see .github/workflows/release.yml.
 #   KEYCHAIN      keychain holding that identity (optional)
-#   INSTALL       1 (default) copies the app into ~/Applications
+#   INSTALL       1 copies the app into ~/Applications (default 0)
+#
+# An ad hoc build is "Lip Dictation Dev" (com.rohit.lipdictation.dev). macOS keeps the Camera
+# and Accessibility permissions per app identity, so a local build sharing the real app's
+# identifier, with a different signature, would make macOS forget them and ask again every
+# time you switched between the two.
 set -euo pipefail
 cd "$(dirname "$0")"
 VERSION="${VERSION:-0.0.0}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
-INSTALL="${INSTALL:-1}"
+INSTALL="${INSTALL:-0}"
+NAME="Lip Dictation"
+BUNDLE_ID=com.rohit.lipdictation
+if [ "$SIGN_IDENTITY" = "-" ]; then
+  NAME="Lip Dictation Dev"
+  BUNDLE_ID=com.rohit.lipdictation.dev
+fi
 
-APP="build/Lip Dictation.app"
+APP="build/$NAME.app"
 swift build -c release
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
@@ -43,9 +54,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Lip Dictation</string>
-  <key>CFBundleDisplayName</key><string>Lip Dictation</string>
-  <key>CFBundleIdentifier</key><string>com.rohit.lipdictation</string>
+  <key>CFBundleName</key><string>__NAME__</string>
+  <key>CFBundleDisplayName</key><string>__NAME__</string>
+  <key>CFBundleIdentifier</key><string>__BUNDLE_ID__</string>
   <key>CFBundleExecutable</key><string>LipDictation</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -60,18 +71,18 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-sed -i '' "s/__VERSION__/$VERSION/g" "$APP/Contents/Info.plist"
+sed -i '' -e "s/__VERSION__/$VERSION/g" -e "s/__NAME__/$NAME/g" -e "s/__BUNDLE_ID__/$BUNDLE_ID/g" "$APP/Contents/Info.plist"
 
 KEYCHAIN_ARGS=()
 [ -n "${KEYCHAIN:-}" ] && KEYCHAIN_ARGS=(--keychain "$KEYCHAIN")
-codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_ARGS[@]}" --identifier com.rohit.lipdictation.uv "$APP/Contents/Helpers/uv"
-codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_ARGS[@]}" --identifier com.rohit.lipdictation "$APP"
+codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_ARGS[@]}" --identifier "$BUNDLE_ID.uv" "$APP/Contents/Helpers/uv"
+codesign --force --sign "$SIGN_IDENTITY" "${KEYCHAIN_ARGS[@]}" --identifier "$BUNDLE_ID" "$APP"
 codesign --verify --strict --deep "$APP"
 echo "Built: $APP ($VERSION)"
 
 if [ "$INSTALL" = 1 ]; then
   mkdir -p ~/Applications
-  rm -rf ~/Applications/"Lip Dictation.app"
+  rm -rf ~/Applications/"$NAME.app"
   cp -R "$APP" ~/Applications/
-  echo "Installed: ~/Applications/Lip Dictation.app"
+  echo "Installed: ~/Applications/$NAME.app"
 fi
