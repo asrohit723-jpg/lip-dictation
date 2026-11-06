@@ -90,7 +90,7 @@ class Engine:
         from .cleanup import Cleaner
         self.cleaner = Cleaner(msg.get("cleanup", "auto"), msg.get("api_key") or None)
         if msg.get("beam"):
-            self.reader.beam.beam_size = int(msg["beam"])
+            self.reader.configure(beam_size=msg["beam"])
         self.fixes.set(personal=[(h, f, int(c)) for h, f, c in msg.get("corrections") or []],
                        community=self.community)
         self.words = [w for w in msg.get("words") or [] if w.strip()] + self.fixes.words()

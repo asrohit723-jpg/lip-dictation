@@ -1,9 +1,14 @@
 """Face landmarks -> 96x96 grayscale mouth crops, aligned the way the model was trained.
 
-MediaPipe FaceLandmarker gives 478 points per frame. We reduce them to the four
-anchors the Auto-AVSR crop uses (right eye, left eye, nose base, mouth centre),
-smooth them over a short window, warp each frame onto the training mean face
-and cut a 96x96 patch around the mouth.
+MediaPipe FaceLandmarker gives 478 points per frame. We map them to the 68 dlib points
+the model's training crops were made from, smooth them over a short window, warp each
+frame onto the training mean face and cut a 96x96 patch around the mouth.
+
+Two alignments are available. "anchors4" (the default) is Auto-AVSR's MediaPipe variant: eye,
+nose and mouth centres. "points8" copies the RetinaFace + FAN preprocessing the model was trained
+with: eight stable points matched to the mean face. On the subtitled news clips they are within
+noise of each other (lips alone 20.6% vs 19.7% WER, with context 18.5% vs 19.3%), so the default
+stays; scripts/eval_vsr.py --align compares them on any test set.
 """
 from pathlib import Path
 
@@ -16,20 +21,23 @@ DATA = Path(__file__).parent / "data"
 CROP = 96
 SMOOTH = 12          # frames in the landmark smoothing window
 
-# MediaPipe face-mesh indices for the dlib-68 groups the mean face is built from.
-EYE_A = [33, 160, 158, 133, 153, 144]
-EYE_B = [362, 385, 387, 263, 373, 380]
-NOSE_BASE = [98, 97, 2, 326, 327]
-MOUTH = [61, 39, 37, 0, 267, 269, 291, 405, 314, 17, 84, 181,
-         78, 82, 13, 312, 308, 317, 14, 87]
+# MediaPipe face-mesh index for each dlib-68 point, in dlib order (jaw, brows, nose, eyes, lips).
+DLIB68 = [127, 234, 132, 58, 172, 150, 176, 148, 152, 377, 400, 379, 397, 288, 361, 454, 356,
+          70, 63, 105, 66, 107, 336, 296, 334, 293, 300,
+          168, 197, 5, 4, 98, 97, 2, 326, 327,
+          33, 160, 158, 133, 153, 144, 362, 385, 387, 263, 373, 380,
+          61, 39, 37, 0, 267, 269, 291, 405, 314, 17, 84, 181, 78, 82, 13, 312, 308, 317, 14, 87]
+STABLE8 = [28, 33, 36, 39, 42, 45, 48, 54]      # nose bridge and tip, eye corners, mouth corners
+MOUTH = slice(48, 68)
+ALIGN = "anchors4"
 
 
-def _reference():
-    ref = np.load(DATA / "20words_mean_face.npy")
-    return np.vstack([ref[36:42].mean(0), ref[42:48].mean(0), ref[31:36].mean(0), ref[48:68].mean(0)])
+def _groups(pts):
+    """Eye, eye, nose base and mouth centres: the four anchors of the "anchors4" alignment."""
+    return np.vstack([pts[36:42].mean(0), pts[42:48].mean(0), pts[31:36].mean(0), pts[MOUTH].mean(0)])
 
 
-REFERENCE = _reference()
+MEAN_FACE = np.load(DATA / "20words_mean_face.npy")
 
 
 class FaceTracker:
@@ -46,18 +54,15 @@ class FaceTracker:
         self.last_ts = -1
 
     def anchors(self, rgb, ts_ms):
-        """(4, 2) pixel anchors for an RGB frame, or None when no face is seen."""
+        """(68, 2) dlib-order pixel landmarks for an RGB frame, or None when no face is seen."""
         ts_ms = max(int(ts_ms), self.last_ts + 1)   # MediaPipe needs increasing timestamps
         self.last_ts = ts_ms
         result = self.landmarker.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts_ms)
         if not result.face_landmarks:
             return None
         h, w = rgb.shape[:2]
-        pts = np.array([(p.x * w, p.y * h) for p in result.face_landmarks[0]], dtype=np.float32)
-        eye_a, eye_b = pts[EYE_A].mean(0), pts[EYE_B].mean(0)
-        if eye_a[0] > eye_b[0]:                      # the reference's first eye is on the image left
-            eye_a, eye_b = eye_b, eye_a
-        return np.vstack([eye_a, eye_b, pts[NOSE_BASE].mean(0), pts[MOUTH].mean(0)])
+        mesh = result.face_landmarks[0]
+        return np.array([(mesh[i].x * w, mesh[i].y * h) for i in DLIB68], dtype=np.float32)
 
     def close(self):
         self.landmarker.close()
@@ -77,22 +82,27 @@ def fill_gaps(anchors):
     return np.stack(out)
 
 
-def mouth_crops(gray_frames, anchors):
-    """Grayscale frames + per-frame anchors (None allowed) -> (T, 96, 96) uint8, or None."""
-    anchors = fill_gaps(anchors)
-    if anchors is None:
+def mouth_crops(gray_frames, landmarks, align=None):
+    """Grayscale frames + per-frame landmarks (None allowed) -> (T, 96, 96) uint8, or None."""
+    landmarks = fill_gaps(landmarks)
+    if landmarks is None:
         return None
+    if (align or ALIGN) == "anchors4":
+        landmarks = np.stack([_groups(p) for p in landmarks])
+        stable, reference, mouth = slice(None), _groups(MEAN_FACE), [3]
+    else:
+        stable, reference, mouth = STABLE8, MEAN_FACE[STABLE8], MOUTH
     crops = []
-    n = len(anchors)
+    n = len(landmarks)
     for i, frame in enumerate(gray_frames):
         m = min(SMOOTH // 2, i, n - 1 - i)
-        smoothed = anchors[i - m:i + m + 1].mean(0)
-        smoothed += anchors[i].mean(0) - smoothed.mean(0)
-        tform = cv2.estimateAffinePartial2D(smoothed, REFERENCE, method=cv2.LMEDS)[0]
+        smoothed = landmarks[i - m:i + m + 1].mean(0)
+        smoothed += landmarks[i].mean(0) - smoothed.mean(0)
+        tform = cv2.estimateAffinePartial2D(smoothed[stable], reference, method=cv2.LMEDS)[0]
         warped = cv2.warpAffine(frame, tform, (256, 256), flags=cv2.INTER_LINEAR,
                                 borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        mouth = smoothed[3] @ tform[:, :2].T + tform[:, 2]
-        crops.append(_cut(warped, mouth))
+        centre = (smoothed[mouth] @ tform[:, :2].T + tform[:, 2]).mean(0)
+        crops.append(_cut(warped, centre))
     return np.stack(crops)
 
 

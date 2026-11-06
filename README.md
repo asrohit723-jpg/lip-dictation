@@ -178,10 +178,24 @@ mac-app/build/Lip\ Dictation.app/Contents/MacOS/LipDictation --snapshot /tmp/sho
 .venv/bin/lip-dictation file samples/2016-03-12.mov --start 20 --end 28
 .venv/bin/python -m pytest -q tests
 
-# Measure accuracy on subtitled clips (samples/*.srt next to each video)
+# Measure accuracy on subtitled clips (samples/*.srt next to each video), with 95% intervals,
+# comparing settings: crop alignment, search width, language-model weight, video speed
+.venv/bin/python scripts/eval_vsr.py news --beam 10,20 --lm 0.3,0.6 --context models/text-lm
+
+# Your own silent test set: mouth prompted sentences, then measure on them
+.venv/bin/python scripts/record_test_set.py testsets/silent
+.venv/bin/python scripts/eval_vsr.py testsets/silent --rate 1.0,1.2,1.4 --context models/text-lm
+
+# Tune the context step on cached readings
 .venv/bin/python scripts/eval_cache.py samples/2016-03-12.mov samples/2017-01-07.mov
 .venv/bin/python scripts/eval_context.py models/text-lm
 ```
+
+The news clips are spoken aloud, so they flatter the lip reader: research on silent speech finds
+mouthing without sound roughly doubles the error of a model trained on spoken video. A test set
+of your own silent dictation is the measurement that matters. Its videos are of your face, so
+`testsets/` is ignored by git; keep it private. With 49 sentences, a change of about 4 points or
+less is within noise, which is why every result comes with an interval.
 
 `--dictate-file` plays a video through the same path as the camera, so the whole app can be tested
 without one. Local builds are ad-hoc signed, so installing one makes macOS ask for permissions again

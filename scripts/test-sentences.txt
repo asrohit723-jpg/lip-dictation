@@ -1,0 +1,102 @@
+# Everyday dictation for a personal silent test set (scripts/record_test_set.py).
+# One sentence per line; lines starting with # are skipped. Add your own at the end.
+I will be there in ten minutes.
+Can we move the meeting to tomorrow morning?
+Thanks for sending the report so quickly.
+Let me know if you need anything else.
+I am running a little late today.
+The weather is really nice this afternoon.
+Please call me when you get home.
+I think we should order pizza tonight.
+Could you send me the latest version of the file?
+Happy birthday, I hope you have a great day.
+I will review the document and get back to you.
+What time does the store close on Sunday?
+The train was delayed by twenty minutes.
+Do you want to grab coffee later this week?
+I forgot my keys at the office.
+We need to buy milk, bread and eggs.
+The project deadline is next Friday.
+I really enjoyed the movie last night.
+Can you pick up the kids from school?
+My phone battery is almost dead.
+Let us discuss this in the next team meeting.
+I have attached the invoice for last month.
+The flight leaves at seven in the evening.
+Please remind me to water the plants.
+I am working from home today.
+How was your weekend?
+The new update fixed most of the problems.
+I will send the slides before the call.
+Our dinner reservation is at eight thirty.
+Could you check whether the printer is working?
+I agree with your suggestion.
+We should leave early to avoid the traffic.
+The package will arrive on Tuesday.
+I need to finish this before lunch.
+Thank you for your help with the presentation.
+Where did you park the car?
+The doctor said I should rest for a few days.
+I am looking forward to the holiday.
+Can you share the meeting notes with everyone?
+The coffee machine is broken again.
+I will be out of the office next week.
+Please let me know your availability.
+That sounds like a great idea.
+I have not received the email yet.
+We are almost out of time.
+The restaurant was very busy last night.
+I think the answer is somewhere in this folder.
+Could you turn down the music a little?
+The children are playing in the garden.
+I will call you back in a few minutes.
+Let us start with the most important item.
+I want to eat a sandwich for lunch.
+She is going to the gym after work.
+The budget needs to be approved by Monday.
+Can you help me move this table?
+I left a message on your voicemail.
+The book is much better than the film.
+We had a long discussion about the plan.
+Please do not forget to lock the door.
+I would like a cup of tea, please.
+The meeting room on the second floor is free.
+He has been working on this for weeks.
+I need a few more days to finish the draft.
+The bus stop is just around the corner.
+Can we talk about this after the call?
+I am sorry for the late reply.
+The results look much better than last time.
+Let me check my calendar and confirm.
+It is going to rain all weekend.
+Please send the address of the venue.
+I just finished reading your message.
+We should celebrate when the project is done.
+The kitchen needs a good clean.
+I am not sure that this is the right approach.
+Could you explain how this works?
+My sister is visiting us next month.
+The internet connection is very slow today.
+I will take the dog for a walk.
+We can meet at the station at nine.
+Please keep me updated on the progress.
+I bought a new pair of running shoes.
+The client wants a few changes to the design.
+Shall we try the new place for lunch?
+I have a headache, so I am going to bed early.
+The report shows a small increase in sales.
+Can you remind me what we decided yesterday?
+I need to renew my passport this year.
+The team did a fantastic job on the launch.
+I will be happy to help with that.
+Do not worry, everything is under control.
+The parking lot is full this morning.
+Could we schedule a quick call this afternoon?
+I lost my umbrella on the way home.
+Please add this to the shopping list.
+I think we are ready to go.
+The garden looks beautiful in the spring.
+We need more chairs for the party.
+I will see you at the airport.
+Thank you so much for the lovely gift.
+Let me know when you are free to talk.

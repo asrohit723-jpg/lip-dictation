@@ -66,6 +66,17 @@ class LipReader:
         ).eval()
         self.encode(np.zeros((25, 96, 96), np.uint8))   # warm up, so the first dictation isn't slow
 
+    def configure(self, beam_size=None, lm_weight=None, ctc_weight=None):
+        """Change the search without reloading: wider beams find more, slower."""
+        b = self.beam
+        if beam_size:
+            b.beam_size = int(beam_size)
+            b.pre_beam_size = int(1.5 * b.beam_size)
+        if ctc_weight is not None:
+            b.weights["ctc"], b.weights["decoder"] = ctc_weight, 1.0 - ctc_weight
+        if lm_weight is not None and b.weights.get("lm"):
+            b.weights["lm"] = lm_weight
+
     @staticmethod
     def prepare(crops):
         """(T, 96, 96) uint8 grayscale mouth crops -> (1, T, 88, 88) normalised tensor."""

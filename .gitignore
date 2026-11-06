@@ -9,3 +9,4 @@ mac-app/.build/
 mac-app/build/
 *.p12
 *.pass
+testsets/

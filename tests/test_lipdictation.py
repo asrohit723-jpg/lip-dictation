@@ -30,6 +30,19 @@ def test_fill_gaps_interpolates_and_extends():
     assert face.fill_gaps([None, None]) is None
 
 
+@pytest.mark.parametrize("align", ["points8", "anchors4"])
+def test_mouth_crop_centres_the_mouth(align):
+    # A face drawn where the mean face is, with a bright mouth: both alignments crop it centred.
+    marks = face.MEAN_FACE.astype(np.float32) + 20
+    img = np.zeros((300, 300), np.uint8)
+    cx, cy = marks[face.MOUTH].mean(0).astype(int)
+    img[cy - 5:cy + 5, cx - 20:cx + 20] = 255
+    crops = face.mouth_crops([img] * 3, [marks] * 3, align=align)
+    assert crops.shape == (3, 96, 96)
+    ys, xs = np.nonzero(crops[1] > 128)
+    assert abs(xs.mean() - 48) < 3 and abs(ys.mean() - 48) < 3
+
+
 @pytest.mark.skipif(not (SAMPLE.exists() and (MODELS / "vsr" / "model.pth").exists()),
                     reason="needs models/ and samples/ (scripts/download-models.sh --samples)")
 def test_reads_a_real_clip():
